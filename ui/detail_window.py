@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from core.image_loader import ImageLoader
+import os
 
 
 class CardDetailDialog(QtWidgets.QDialog):
@@ -19,6 +20,9 @@ class CardDetailDialog(QtWidgets.QDialog):
     “pixmap_lg”, “pixmap_normal”, “pixmap_small”.
     """
 
+    image_loaded = QtCore.pyqtSignal(str, QtGui.QPixmap)
+    _CACHE_DIR = "./resources/cache"
+
     def __init__(
         self,
         card: dict,
@@ -27,6 +31,8 @@ class CardDetailDialog(QtWidgets.QDialog):
         super().__init__(parent, QtCore.Qt.WindowType.Dialog)
         self.setWindowTitle(card.get("name", "Card details"))
         self.setModal(True)
+        self._thread_pool = QtCore.QThreadPool.globalInstance()
+        self.image_loaded.connect(self._on_image_loaded)
 
         # ------------------------------------------------------------------
         # Image section
@@ -96,6 +102,19 @@ class CardDetailDialog(QtWidgets.QDialog):
         """
         self._pixmap = pixmap
         self._img_lbl.setPixmap(pixmap)
+
+    @staticmethod
+    def _best_image_url(card: dict) -> str | None:
+        uris = card.get("image_uris", {})
+        for key in ("png", "large", "normal", "small"):
+            if uris.get(key):
+                return uris[key]
+        faces = card.get("card_faces")
+        if faces:
+            for key in ("png", "large", "normal", "small"):
+                if faces[0].get("image_uris", {}).get(key):
+                    return faces[0]["image_uris"][key]
+        return None
 
     @staticmethod
     def _build_text(card: dict) -> str:
