@@ -1,7 +1,7 @@
 from PyQt6 import QtWidgets, QtCore, QtGui
 import os
 import csv
-from core.image_loader import ImageLoader
+from core.image_loader import ImageLoader, ImageLoaderSignals
 from core.scryfall_api import ScryfallAPI
 from utils.helpers import calculate_columns
 from ui.detail_window import CardDetailDialog   # <-- NEW IMPORT
@@ -13,11 +13,10 @@ class GalleryConfig:
     CACHE_DIR = './resources/cache'
 
 class ScryfallGallery(QtWidgets.QMainWindow):
-    image_loaded = QtCore.pyqtSignal(str, QtGui.QPixmap)
-
     def __init__(self, cache_dir='./resources/cache'):
         super().__init__()
         self.setWindowTitle('Scryfall Image Gallery')
+        self.resize(1024, 768)
 
         # State
         self.page = 1
@@ -41,7 +40,9 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         self.pool = QtCore.QThreadPool.globalInstance()
         self.api = ScryfallAPI()
 
-        self.image_loaded.connect(self.set_image)
+        self.image_loader_signals = ImageLoaderSignals()
+        self.image_loader_signals.image_loaded.connect(self.set_image)
+        self.image_loader_signals.image_error.connect(self._on_image_error)
 
         self.progressBar = QtWidgets.QProgressBar()
         self.progressBar.setVisible(False)
@@ -212,7 +213,7 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         Open a modal dialog that shows an enlarged image and the card’s
         rules text.  The dialog is defined in ui.detail_window.py.
         """
-        CardDetailDialog(card, self).exec()
+        CardDetailDialog(card, self, cache_dir=GalleryConfig.CACHE_DIR).exec()
 
     def _display_results(self, cards):
         while self.grid.count():
@@ -236,7 +237,7 @@ class ScryfallGallery(QtWidgets.QMainWindow):
             self.grid.addWidget(lbl, row, col)
             self.labels[url] = lbl
 
-            loader = ImageLoader(url, self.cache_dir, self.thumb_size, self.image_loaded)
+            loader = ImageLoader(url, self.cache_dir, self.thumb_size, self.image_loader_signals)
             self.pool.start(loader)
 
     def _get_best_image_url(self, card):
@@ -250,6 +251,17 @@ class ScryfallGallery(QtWidgets.QMainWindow):
                 if faces[0].get('image_uris', {}).get(key):
                     return faces[0]['image_uris'][key]
         return None
+
+    @QtCore.pyqtSlot(str, str)
+    def _on_image_error(self, url: str, error_message: str) -> None:
+        lbl = self.labels.get(url)
+        if lbl:
+            lbl.setText(f"Error: {error_message}")
+            lbl.setStyleSheet("color: red;")
+        val = self.progressBar.value() + 1
+        self.progressBar.setValue(val)
+        if val >= self.progressBar.maximum():
+            self.progressBar.setVisible(False)
 
     @QtCore.pyqtSlot(str, QtGui.QPixmap)
     def set_image(self, url, pix):

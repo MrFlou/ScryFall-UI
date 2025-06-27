@@ -6,7 +6,7 @@ else that needs it.
 from __future__ import annotations
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from core.image_loader import ImageLoader
+from core.image_loader import ImageLoader, ImageLoaderSignals
 import os
 
 
@@ -20,19 +20,20 @@ class CardDetailDialog(QtWidgets.QDialog):
     “pixmap_lg”, “pixmap_normal”, “pixmap_small”.
     """
 
-    image_loaded = QtCore.pyqtSignal(str, QtGui.QPixmap)
-    _CACHE_DIR = "./resources/cache"
-
     def __init__(
         self,
         card: dict,
         parent: QtWidgets.QWidget | None = None,
+        cache_dir: str = "./resources/cache",
     ) -> None:
         super().__init__(parent, QtCore.Qt.WindowType.Dialog)
         self.setWindowTitle(card.get("name", "Card details"))
         self.setModal(True)
         self._thread_pool = QtCore.QThreadPool.globalInstance()
-        self.image_loaded.connect(self._on_image_loaded)
+        self.image_loader_signals = ImageLoaderSignals()
+        self.image_loader_signals.image_loaded.connect(self._on_image_loaded)
+        self.image_loader_signals.image_error.connect(self._on_image_error)
+        self._cache_dir = cache_dir
 
         # ------------------------------------------------------------------
         # Image section
@@ -85,13 +86,13 @@ class CardDetailDialog(QtWidgets.QDialog):
         target_size = QtCore.QSize(480, 672)
 
         # make sure the cache directory exists
-        os.makedirs(self._CACHE_DIR, exist_ok=True)
+        os.makedirs(self._cache_dir, exist_ok=True)
 
         loader = ImageLoader(
             url=url,
-            cache_dir=self._CACHE_DIR,
+            cache_dir=self._cache_dir,
             thumb_size=target_size,
-            signal=self.image_loaded,
+            signals=self.image_loader_signals,
         )
         self._thread_pool.start(loader)
 
@@ -102,6 +103,11 @@ class CardDetailDialog(QtWidgets.QDialog):
         """
         self._pixmap = pixmap
         self._img_lbl.setPixmap(pixmap)
+
+    @QtCore.pyqtSlot(str, str)
+    def _on_image_error(self, url: str, error_message: str) -> None:
+        self._img_lbl.setText(f"Failed to load image: {error_message}")
+        self._img_lbl.setStyleSheet("color: red;")
 
     @staticmethod
     def _best_image_url(card: dict) -> str | None:

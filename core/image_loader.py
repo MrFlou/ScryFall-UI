@@ -1,13 +1,17 @@
 import hashlib, os, requests
 from PyQt6 import QtCore, QtGui
 
+class ImageLoaderSignals(QtCore.QObject):
+    image_loaded = QtCore.pyqtSignal(str, QtGui.QPixmap)
+    image_error = QtCore.pyqtSignal(str, str)
+
 class ImageLoader(QtCore.QRunnable):
-    def __init__(self, url, cache_dir, thumb_size, signal):
+    def __init__(self, url, cache_dir, thumb_size, signals):
         super().__init__()
         self.url = url
         self.cache_dir = cache_dir
         self.thumb_size = thumb_size
-        self.signal = signal
+        self.signals = signals
 
     @QtCore.pyqtSlot()
     def run(self):
@@ -28,6 +32,6 @@ class ImageLoader(QtCore.QRunnable):
                 QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                 QtCore.Qt.TransformationMode.SmoothTransformation
             )
-            self.signal.emit(self.url, scaled)
+            self.signals.image_loaded.emit(self.url, scaled)
         except Exception as e:
-            print(f'[LOG] Failed to load {self.url}: {e}')
+            self.signals.image_error.emit(self.url, str(e))
