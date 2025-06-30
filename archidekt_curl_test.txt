@@ -1,0 +1,30 @@
+$uri = "https://archidekt.com/api/collection/export/v2/550191/"
+$headers = @{
+    "Accept" = "application/json"
+    "Content-Type" = "application/json"
+}
+$body = @{
+    fields = @(
+        "quantity",
+        "card__oracleCard__name",
+        "modifier",
+        "condition",
+        "createdAt",
+        "language",
+        "purchasePrice",
+        "tags",
+        "card__edition__editionname",
+        "card__edition__editioncode",
+        "card__multiverseid",
+        "card__uid",
+        "card__collectorNumber"
+    )
+    page = 1
+    game = 1
+    pageSize = 2500
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -OutFile "archidekt_response.json"
+
+# To view the content of the downloaded file:
+Get-Content -Path "archidekt_response.json" | ConvertFrom-Json | Format-List

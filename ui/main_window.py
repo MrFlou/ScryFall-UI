@@ -4,13 +4,8 @@ import csv
 from core.image_loader import ImageLoader, ImageLoaderSignals
 from core.scryfall_api import ScryfallAPI
 from utils.helpers import calculate_columns
-from ui.detail_window import CardDetailDialog   # <-- NEW IMPORT
-
-class GalleryConfig:
-    THUMB_WIDTH = 120
-    ASPECT_RATIO = 168 / 120
-    RESIZE_DELAY = 300
-    CACHE_DIR = './resources/cache'
+from ui.config import GalleryConfig
+from ui.detail_window import CardDetailDialog
 
 class ScryfallGallery(QtWidgets.QMainWindow):
     def __init__(self, cache_dir='./resources/cache'):
@@ -52,8 +47,16 @@ class ScryfallGallery(QtWidgets.QMainWindow):
 
     def _build_ui(self):
         central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
         layout = QtWidgets.QVBoxLayout(central)
 
+        self._create_control_widgets(layout)
+        self._create_scroll_area(layout)
+        self._create_navigation_buttons(layout)
+
+        layout.addWidget(self.lbl_total)
+
+    def _create_control_widgets(self, layout):
         ctrl_layout = QtWidgets.QHBoxLayout()
         self.query_edit = QtWidgets.QLineEdit()
         self.query_edit.setPlaceholderText('Enter Scryfall query')
@@ -67,6 +70,14 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         btn_load = QtWidgets.QPushButton('Load Collection...')
         btn_load.clicked.connect(self.load_collection)
         ctrl_layout.addWidget(btn_load)
+
+        self.archidekt_id_edit = QtWidgets.QLineEdit()
+        self.archidekt_id_edit.setPlaceholderText('Archidekt Collection ID')
+        ctrl_layout.addWidget(self.archidekt_id_edit)
+
+        btn_load_archidekt = QtWidgets.QPushButton('Load Archidekt')
+        btn_load_archidekt.clicked.connect(self.load_archidekt_collection)
+        ctrl_layout.addWidget(btn_load_archidekt)
 
         self.chk_filter = QtWidgets.QCheckBox('Filter Collection')
         self.chk_filter.toggled.connect(self.toggle_filter)
@@ -83,6 +94,7 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         layout.addLayout(ctrl_layout)
         layout.addWidget(self.progressBar)
 
+    def _create_scroll_area(self, layout):
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setWidgetResizable(True)
         container = QtWidgets.QWidget()
@@ -90,6 +102,7 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         self.scroll.setWidget(container)
         layout.addWidget(self.scroll)
 
+    def _create_navigation_buttons(self, layout):
         nav_layout = QtWidgets.QHBoxLayout()
         self.btn_prev = QtWidgets.QPushButton('<< Prev')
         self.btn_prev.clicked.connect(self.prev_page)
@@ -105,8 +118,6 @@ class ScryfallGallery(QtWidgets.QMainWindow):
         nav_layout.addWidget(self.btn_next)
 
         layout.addLayout(nav_layout)
-        layout.addWidget(self.lbl_total)
-        self.setCentralWidget(central)
     
     def load_collection(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Open Collection CSV', '', 'CSV Files (*.csv)')
@@ -119,6 +130,26 @@ class ScryfallGallery(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, 'Collection Loaded', f'Loaded {len(self.collection_names)} names')
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, 'Error', f'Failed to load CSV: {e}')
+
+    def load_archidekt_collection(self):
+        collection_id_str = self.archidekt_id_edit.text().strip()
+        if not collection_id_str:
+            QtWidgets.QMessageBox.warning(self, 'Input Error', 'Please enter an Archidekt Collection ID.')
+            return
+        try:
+            collection_id = int(collection_id_str)
+            collection = self.api.get_archidekt_collection_from_api(collection_id)
+            if collection:
+                self.collection_names = {card['Name'].strip() for card in collection if 'Name' in card}
+                QtWidgets.QMessageBox.information(self, 'Collection Loaded', f'Loaded {len(self.collection_names)} card names from Archidekt.')
+            else:
+                QtWidgets.QMessageBox.warning(self, 'Collection Not Found', 'Could not retrieve collection from Archidekt or it is empty.')
+            if self.filter_enabled:
+                self.search()
+        except ValueError:
+            QtWidgets.QMessageBox.critical(self, 'Input Error', 'Invalid Archidekt Collection ID. Please enter a number.')
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, 'Error', f'Failed to load Archidekt collection: {e}')
 
     def toggle_filter(self, enabled: bool):
         self.filter_enabled = enabled
